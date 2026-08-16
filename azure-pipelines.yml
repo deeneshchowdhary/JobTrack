@@ -44,6 +44,17 @@ stages:
                 --no-restore
 
           - task: DotNetCoreCLI@2
+            displayName: Run unit tests
+            inputs:
+              command: test
+              projects: "JobTrack.Api.Tests/JobTrack.Api.Tests.csproj"
+              arguments: >
+                --configuration $(buildConfiguration)
+                --logger trx
+                --collect "XPlat Code Coverage"
+              publishTestResults: true
+
+          - task: DotNetCoreCLI@2
             displayName: Publish
             inputs:
               command: publish

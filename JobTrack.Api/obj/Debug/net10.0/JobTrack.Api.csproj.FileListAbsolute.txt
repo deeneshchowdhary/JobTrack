@@ -166,3 +166,10 @@
 /Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/tr/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
 /Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/zh-Hans/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
 /Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/zh-Hant/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+/Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/publish/web.config
+/Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/publish/appsettings.Development.json
+/Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/publish/appsettings.json
+/Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/publish/JobTrack.Api.deps.json
+/Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/publish/JobTrack.Api.runtimeconfig.json
+/Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/bin/Debug/net10.0/publish/JobTrack.Api.staticwebassets.endpoints.json
+/Users/deeneshchowdhary/Documents/JobTrack/JobTrack.Api/obj/Debug/net10.0/JobTrack.Api.sourcelink.json

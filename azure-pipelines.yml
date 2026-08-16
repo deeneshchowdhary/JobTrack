@@ -1,0 +1,91 @@
+trigger:
+  branches:
+    include:
+      - Main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  buildConfiguration: Release
+  projectPath: JobTrack.Api/JobTrack.Api.csproj
+  artifactName: jobtrack-api
+  azureSubscription: jobtrack-azure-connection
+  appServiceName: jobtrack-api-deenesh
+
+stages:
+  - stage: Build
+    displayName: Build and test
+
+    jobs:
+      - job: BuildApi
+        displayName: Build API
+
+        steps:
+          - task: UseDotNet@2
+            displayName: Install .NET SDK
+            inputs:
+              packageType: sdk
+              version: "10.x"
+
+          - task: DotNetCoreCLI@2
+            displayName: Restore
+            inputs:
+              command: restore
+              projects: "$(projectPath)"
+
+          - task: DotNetCoreCLI@2
+            displayName: Build
+            inputs:
+              command: build
+              projects: "$(projectPath)"
+              arguments: >
+                --configuration $(buildConfiguration)
+                --no-restore
+
+          - task: DotNetCoreCLI@2
+            displayName: Publish
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: "$(projectPath)"
+              arguments: >
+                --configuration $(buildConfiguration)
+                --output $(Build.ArtifactStagingDirectory)
+                --no-build
+              zipAfterPublish: true
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish pipeline artifact
+            inputs:
+              targetPath: "$(Build.ArtifactStagingDirectory)"
+              artifact: "$(artifactName)"
+
+  - stage: Deploy
+    displayName: Deploy to Azure
+    dependsOn: Build
+    condition: succeeded()
+
+    jobs:
+      - deployment: DeployApi
+        displayName: Deploy JobTrack API
+        environment: production
+
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  displayName: Download API artifact
+                  inputs:
+                    artifact: "$(artifactName)"
+                    path: "$(Pipeline.Workspace)/$(artifactName)"
+
+                - task: AzureWebApp@1
+                  displayName: Deploy App Service
+                  inputs:
+                    azureSubscription: "$(azureSubscription)"
+                    appType: webAppLinux
+                    appName: "$(appServiceName)"
+                    package: >
+                      $(Pipeline.Workspace)/$(artifactName)/**/*.zip

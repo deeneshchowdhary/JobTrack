@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "JobTrack_Functions": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7191",
+      "launchBrowser": false
+    }
+  }
+}

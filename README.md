@@ -78,6 +78,37 @@ dotnet --list-sdks
 
 ## Installation and local setup
 
+### Quick start with Docker
+
+Docker is the easiest way to run the API and SQL Server together:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The API is then available at `http://localhost:5208`, with Swagger UI at
+`http://localhost:5208/swagger`. The database schema is created automatically.
+Values in `.env` are for local development only and must not be reused in a
+deployed environment.
+
+Stop the containers without deleting the database:
+
+```bash
+docker compose down
+```
+
+To also delete the local database volume and all of its JobTrack data:
+
+```bash
+docker compose down --volumes
+```
+
+On ARM-based computers, the SQL Server container runs through `linux/amd64`
+emulation and may start more slowly.
+
+### Manual setup
+
 ### 1. Clone and restore
 
 ```bash

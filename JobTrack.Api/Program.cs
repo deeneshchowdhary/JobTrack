@@ -29,6 +29,36 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+if (builder.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    const int maximumAttempts = 10;
+
+    for (var attempt = 1; attempt <= maximumAttempts; attempt++)
+    {
+        try
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider
+                .GetRequiredService<JobTrackDbContext>();
+
+            await dbContext.Database.MigrateAsync();
+            app.Logger.LogInformation("Database migrations completed.");
+            break;
+        }
+        catch (Exception exception) when (attempt < maximumAttempts)
+        {
+            app.Logger.LogWarning(
+                exception,
+                "Database migration attempt {Attempt} of {MaximumAttempts} " +
+                "failed. Retrying in 3 seconds.",
+                attempt,
+                maximumAttempts);
+
+            await Task.Delay(TimeSpan.FromSeconds(3));
+        }
+    }
+}
+
 app.UseSwagger();
 app.UseSwaggerUI();
 

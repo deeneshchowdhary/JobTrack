@@ -47,11 +47,14 @@ JobTrack/
 │   └── Models/                   Domain/data model
 ├── JobTrack.Api.Tests/           API controller tests
 ├── JobTrack.Functions/           Timer and HTTP-triggered Azure Functions
-├── JobTrack.slnx                 API and test solution
-└── azure-pipelines.yml           API build and App Service deployment pipeline
+├── JobTrack.slnx                 API, Functions, and test solution
+└── azure-pipelines.yml           Build, test, package, and API deployment pipeline
 ```
 
-The API and Functions project share the same `JobApplications` SQL table, but use different data-access approaches: the API uses EF Core while Functions uses SQL queries through `Microsoft.Data.SqlClient`. The Functions project is not currently included in `JobTrack.slnx` or the Azure Pipeline.
+The API and Functions project share the same `JobApplications` SQL table, but
+use different data-access approaches: the API uses EF Core while Functions uses
+SQL queries through `Microsoft.Data.SqlClient`. Both projects are included in
+the solution and CI build.
 
 ## Prerequisites
 
@@ -301,9 +304,9 @@ In Azure App Service, configure the API connection string through App Service Co
 `azure-pipelines.yml` runs for pushes to `main` and:
 
 1. Installs the .NET 10 SDK.
-2. Restores and builds the API in `Release` mode.
+2. Restores and builds the API, tests, and Azure Functions in `Release` mode.
 3. Runs the xUnit tests and collects coverage.
-4. Publishes a zipped API artifact.
+4. Publishes separate zipped API and Azure Functions artifacts.
 5. Deploys it to a Linux Azure App Service.
 
 Before using the pipeline in another Azure DevOps project, update these variables:
@@ -312,7 +315,11 @@ Before using the pipeline in another Azure DevOps project, update these variable
 - `appServiceName`: the target Azure App Service name
 - `artifactName`: optional artifact naming override
 
-The target App Service must have `ConnectionStrings__DefaultConnection` (or the equivalent App Service connection-string entry) configured. Database migrations are not applied by the current pipeline, and the Functions project requires a separate deployment process.
+The target App Service must have `ConnectionStrings__DefaultConnection` (or
+the equivalent App Service connection-string entry) configured. Database
+migrations are not applied by the current pipeline. The Functions artifact is
+built and retained by CI, but deployment requires a separately configured
+Function App and deployment stage.
 
 ## Troubleshooting
 

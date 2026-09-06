@@ -8,8 +8,11 @@ pool:
 
 variables:
   buildConfiguration: Release
+  solutionPath: JobTrack.slnx
   projectPath: JobTrack.Api/JobTrack.Api.csproj
+  functionsProjectPath: JobTrack.Functions/JobTrack_Functions.csproj
   artifactName: jobtrack-api
+  functionsArtifactName: jobtrack-functions
   azureSubscription: jobtrack-azure-connection
   appServiceName: jobtrack-api-deenesh
 
@@ -18,8 +21,8 @@ stages:
     displayName: Build and test
 
     jobs:
-      - job: BuildApi
-        displayName: Build API
+      - job: BuildSolution
+        displayName: Build API and Functions
 
         steps:
           - task: UseDotNet@2
@@ -29,16 +32,16 @@ stages:
               version: "10.x"
 
           - task: DotNetCoreCLI@2
-            displayName: Restore
+            displayName: Restore solution
             inputs:
               command: restore
-              projects: "$(projectPath)"
+              projects: "$(solutionPath)"
 
           - task: DotNetCoreCLI@2
-            displayName: Build
+            displayName: Build solution
             inputs:
               command: build
-              projects: "$(projectPath)"
+              projects: "$(solutionPath)"
               arguments: >
                 --configuration $(buildConfiguration)
                 --no-restore
@@ -50,27 +53,49 @@ stages:
               projects: "JobTrack.Api.Tests/JobTrack.Api.Tests.csproj"
               arguments: >
                 --configuration $(buildConfiguration)
+                --no-build
+                --no-restore
                 --logger trx
                 --collect "XPlat Code Coverage"
               publishTestResults: true
 
           - task: DotNetCoreCLI@2
-            displayName: Publish
+            displayName: Publish API
             inputs:
               command: publish
               publishWebProjects: false
               projects: "$(projectPath)"
               arguments: >
                 --configuration $(buildConfiguration)
-                --output $(Build.ArtifactStagingDirectory)
+                --output $(Build.ArtifactStagingDirectory)/api
                 --no-build
+                --no-restore
               zipAfterPublish: true
 
           - task: PublishPipelineArtifact@1
-            displayName: Publish pipeline artifact
+            displayName: Publish API artifact
             inputs:
-              targetPath: "$(Build.ArtifactStagingDirectory)"
+              targetPath: "$(Build.ArtifactStagingDirectory)/api"
               artifact: "$(artifactName)"
+
+          - task: DotNetCoreCLI@2
+            displayName: Publish Azure Functions
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: "$(functionsProjectPath)"
+              arguments: >
+                --configuration $(buildConfiguration)
+                --output $(Build.ArtifactStagingDirectory)/functions
+                --no-build
+                --no-restore
+              zipAfterPublish: true
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Azure Functions artifact
+            inputs:
+              targetPath: "$(Build.ArtifactStagingDirectory)/functions"
+              artifact: "$(functionsArtifactName)"
 
   - stage: Deploy
     displayName: Deploy to Azure

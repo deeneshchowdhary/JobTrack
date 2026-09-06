@@ -1,6 +1,18 @@
 @JobTrack.Api_HostAddress = http://localhost:5208
 
-GET {{JobTrack.Api_HostAddress}}/weatherforecast/
+GET {{JobTrack.Api_HostAddress}}/api/JobApplications?page=1&pageSize=20&sortBy=appliedDate&sortDirection=desc
 Accept: application/json
+
+###
+
+POST {{JobTrack.Api_HostAddress}}/api/JobApplications
+Content-Type: application/json
+
+{
+  "company": "Example Corp",
+  "position": "Software Engineer",
+  "status": "Applied",
+  "salary": 120000
+}
 
 ###

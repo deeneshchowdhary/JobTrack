@@ -1,3 +1,4 @@
+using JobTrack.Api.Contracts;
 using JobTrack.Api.Controllers;
 using JobTrack.Api.Data;
 using JobTrack.Api.Models;
@@ -18,88 +19,131 @@ public class JobApplicationsControllerTests
         return new JobTrackDbContext(options);
     }
 
+    private static JobApplicationsController CreateController(
+        JobTrackDbContext context) =>
+        new(context, NullLogger<JobApplicationsController>.Instance);
+
     [Fact]
-    public async Task Create_ValidApplication_ReturnsCreatedAndSavesApplication()
+    public async Task Create_ValidRequest_NormalizesAndSavesApplication()
     {
         await using var context = CreateContext();
+        var controller = CreateController(context);
 
-        var controller = new JobApplicationsController(
-            context,
-            NullLogger<JobApplicationsController>.Instance);
-
-        var application = new JobApplication
+        var response = await controller.Create(new CreateJobApplicationRequest
         {
-            Company = "Test Company",
-            Position = "Software Developer",
-            Status = "Applied",
-            AppliedDate = DateTime.UtcNow,
+            Company = "  Test Company  ",
+            Position = " Software Developer ",
+            Status = "applied",
             Salary = 100000,
-            Notes = "Created by automated test"
-        };
+            Notes = " Created by automated test "
+        });
 
-        var response = await controller.Create(application);
+        var created = Assert.IsType<CreatedAtActionResult>(response.Result);
+        var application = Assert.IsType<JobApplicationResponse>(created.Value);
 
-        var createdResult = Assert.IsType<CreatedAtActionResult>(
-            response.Result);
-
-        var createdApplication = Assert.IsType<JobApplication>(
-            createdResult.Value);
-
-        Assert.True(createdApplication.Id > 0);
-        Assert.Equal("Test Company", createdApplication.Company);
+        Assert.True(application.Id > 0);
+        Assert.Equal("Test Company", application.Company);
+        Assert.Equal(JobApplicationStatuses.Applied, application.Status);
         Assert.Equal(1, await context.JobApplications.CountAsync());
     }
 
     [Fact]
-    public async Task GetAll_WithStatusFilter_ReturnsOnlyMatchingApplications()
+    public async Task Create_InvalidStatus_ReturnsValidationProblem()
     {
         await using var context = CreateContext();
+        var controller = CreateController(context);
 
-        context.JobApplications.AddRange(
-            new JobApplication
-            {
-                Company = "Company One",
-                Position = "Developer",
-                Status = "Applied",
-                AppliedDate = DateTime.UtcNow
-            },
-            new JobApplication
-            {
-                Company = "Company Two",
-                Position = "Senior Developer",
-                Status = "Interview",
-                AppliedDate = DateTime.UtcNow
-            });
+        var response = await controller.Create(new CreateJobApplicationRequest
+        {
+            Company = "Test Company",
+            Position = "Developer",
+            Status = "Maybe"
+        });
 
-        await context.SaveChangesAsync();
-
-        var controller = new JobApplicationsController(
-            context,
-            NullLogger<JobApplicationsController>.Instance);
-
-        var response = await controller.GetAll("Interview");
-
-        var applications = Assert.IsAssignableFrom<
-            IEnumerable<JobApplication>>(response.Value);
-
-        var results = applications.ToList();
-
-        Assert.Single(results);
-        Assert.Equal("Company Two", results[0].Company);
-        Assert.Equal("Interview", results[0].Status);
+        var result = Assert.IsAssignableFrom<ObjectResult>(response.Result);
+        Assert.Equal(400, result.StatusCode);
+        Assert.IsType<ValidationProblemDetails>(result.Value);
+        Assert.Empty(context.JobApplications);
     }
 
     [Fact]
-    public async Task GetById_MissingApplication_ReturnsNotFound()
+    public async Task GetAll_FiltersSearchesSortsAndPaginates()
+    {
+        await using var context = CreateContext();
+        context.JobApplications.AddRange(
+            Application("Beta Labs", "Developer", "Applied", 2),
+            Application("Alpha Labs", "Senior Developer", "Interview", 3),
+            Application("Gamma Inc", "Designer", "Interview", 1));
+        await context.SaveChangesAsync();
+
+        var response = await CreateController(context).GetAll(
+            new JobApplicationQuery
+            {
+                Status = "interview",
+                Search = "developer",
+                SortBy = "company",
+                SortDirection = "asc",
+                Page = 1,
+                PageSize = 1
+            });
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var page = Assert.IsType<PagedResponse<JobApplicationResponse>>(ok.Value);
+
+        Assert.Single(page.Items);
+        Assert.Equal("Alpha Labs", page.Items[0].Company);
+        Assert.Equal(1, page.TotalItems);
+        Assert.Equal(1, page.TotalPages);
+    }
+
+    [Fact]
+    public async Task Update_MapsAllowedFieldsOntoExistingApplication()
+    {
+        await using var context = CreateContext();
+        var existing = Application("Old Company", "Developer", "Applied", 1);
+        context.JobApplications.Add(existing);
+        await context.SaveChangesAsync();
+
+        var response = await CreateController(context).Update(
+            existing.Id,
+            new UpdateJobApplicationRequest
+            {
+                Company = "New Company",
+                Position = "Senior Developer",
+                Status = "offer",
+                AppliedDate = DateTime.UtcNow,
+                Salary = 150000
+            });
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var updated = Assert.IsType<JobApplicationResponse>(ok.Value);
+
+        Assert.Equal(existing.Id, updated.Id);
+        Assert.Equal("New Company", updated.Company);
+        Assert.Equal(JobApplicationStatuses.Offer, updated.Status);
+    }
+
+    [Fact]
+    public async Task GetById_MissingApplication_ReturnsProblemDetails()
     {
         await using var context = CreateContext();
 
-        var controller = new JobApplicationsController(
-            context,
-            NullLogger<JobApplicationsController>.Instance);
+        var response = await CreateController(context).GetById(999);
 
-        var response = await controller.GetById(999);
-
-        Assert.IsType<NotFoundResult>(response.Result);
+        var result = Assert.IsType<ObjectResult>(response.Result);
+        Assert.Equal(404, result.StatusCode);
+        Assert.IsType<ProblemDetails>(result.Value);
     }
+
+    private static JobApplication Application(
+        string company,
+        string position,
+        string status,
+        int daysAgo) => new()
+        {
+            Company = company,
+            Position = position,
+            Status = status,
+            AppliedDate = DateTime.UtcNow.AddDays(-daysAgo)
+        };
 }

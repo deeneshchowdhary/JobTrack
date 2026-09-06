@@ -12,6 +12,7 @@ builder.Services.AddDbContext<JobTrackDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -58,6 +59,8 @@ if (builder.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
         }
     }
 }
+
+app.UseExceptionHandler();
 
 app.UseSwagger();
 app.UseSwaggerUI();

@@ -214,11 +214,11 @@ All application routes are rooted at `/api/JobApplications`.
 
 | Method | Route | Description | Success response |
 | --- | --- | --- | --- |
-| `GET` | `/api/JobApplications` | List applications, newest first | `200 OK` |
-| `GET` | `/api/JobApplications?status=Interview` | Filter by an exact, case-sensitive status | `200 OK` |
+| `GET` | `/api/JobApplications` | Return a paginated application list | `200 OK` |
+| `GET` | `/api/JobApplications?status=Interview&search=engineer&page=1&pageSize=20` | Filter and search applications | `200 OK` |
 | `GET` | `/api/JobApplications/{id}` | Get one application | `200 OK` |
 | `POST` | `/api/JobApplications` | Create an application | `201 Created` |
-| `PUT` | `/api/JobApplications/{id}` | Replace an application; route and body IDs must match | `204 No Content` |
+| `PUT` | `/api/JobApplications/{id}` | Replace the editable fields of an application | `200 OK` |
 | `DELETE` | `/api/JobApplications/{id}` | Delete an application | `204 No Content` |
 | `GET` | `/api/JobApplications/dashboard` | Return counts grouped by status | `200 OK` |
 | `GET` | `/health` | Return API health and a UTC timestamp | `200 OK` |
@@ -238,19 +238,28 @@ curl -X POST http://localhost:5208/api/JobApplications \
   }'
 ```
 
+The list endpoint accepts `page` (default `1`), `pageSize` (default `20`, maximum
+`100`), `search`, `status`, `sortBy`, and `sortDirection`. Supported sort fields
+are `appliedDate`, `company`, `position`, `salary`, and `status`; direction is
+`asc` or `desc`. Its response contains `items`, `page`, `pageSize`, `totalItems`,
+and `totalPages`.
+
 Application fields:
 
 | Field | Type | Rules/default |
 | --- | --- | --- |
-| `id` | integer | Database-generated; ignored when creating |
+| `id` | integer | Database-generated; response-only |
 | `company` | string | Required, maximum 150 characters |
 | `position` | string | Required, maximum 150 characters |
-| `status` | string | Maximum 50 characters; defaults to `Applied` |
+| `status` | string | Validated; defaults to `Applied` when creating |
 | `appliedDate` | ISO 8601 date/time | Defaults to the current UTC time; converted to UTC on create |
 | `salary` | decimal or null | Optional; stored as `decimal(18,2)` |
 | `notes` | string or null | Optional, maximum 1,000 characters |
 
-Status values are free-form strings rather than an enum. Use consistent casing such as `Applied`, `Interview`, `Offer`, and `Rejected`; filtering and follow-up detection depend on exact values.
+Supported statuses are `Saved`, `Applied`, `Interview`, `Offer`, `Rejected`, and
+`Withdrawn`. Inputs and filters are case-insensitive and responses use canonical
+casing. Validation failures and missing resources use standard Problem Details
+responses.
 
 ## Testing
 
@@ -267,7 +276,9 @@ dotnet test JobTrack.Api.Tests/JobTrack.Api.Tests.csproj \
   --collect "XPlat Code Coverage"
 ```
 
-The existing tests exercise application creation, status filtering, and missing-record behavior with an isolated in-memory database.
+The existing tests exercise DTO mapping, status validation, search, sorting,
+pagination, safe updates, and missing-record behavior with an isolated in-memory
+database.
 
 ## Database migrations
 

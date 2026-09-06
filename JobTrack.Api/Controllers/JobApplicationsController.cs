@@ -1,3 +1,4 @@
+using JobTrack.Api.Contracts;
 using JobTrack.Api.Data;
 using JobTrack.Api.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,12 @@ namespace JobTrack.Api.Controllers;
 [Route("api/[controller]")]
 public class JobApplicationsController : ControllerBase
 {
+    private static readonly HashSet<string> SortFields =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "appliedDate", "company", "position", "salary", "status"
+        };
+
     private readonly JobTrackDbContext _context;
     private readonly ILogger<JobApplicationsController> _logger;
 
@@ -21,111 +28,197 @@ public class JobApplicationsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<JobApplication>>> GetAll(
-        [FromQuery] string? status)
+    public async Task<ActionResult<PagedResponse<JobApplicationResponse>>> GetAll(
+        [FromQuery] JobApplicationQuery request)
     {
+        if (!SortFields.Contains(request.SortBy))
+        {
+            return InvalidField(nameof(request.SortBy),
+                $"SortBy must be one of: {string.Join(", ", SortFields)}.");
+        }
+
+        if (!request.SortDirection.Equals("asc", StringComparison.OrdinalIgnoreCase) &&
+            !request.SortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase))
+        {
+            return InvalidField(nameof(request.SortDirection),
+                "SortDirection must be either 'asc' or 'desc'.");
+        }
+
         IQueryable<JobApplication> query =
             _context.JobApplications.AsNoTracking();
 
-        if (!string.IsNullOrWhiteSpace(status))
+        if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            query = query.Where(x => x.Status == status);
+            if (!JobApplicationStatuses.TryNormalize(request.Status, out var status))
+            {
+                return InvalidStatus(nameof(request.Status));
+            }
+
+            query = query.Where(application => application.Status == status);
         }
 
-        return await query
-            .OrderByDescending(x => x.AppliedDate)
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(application =>
+                application.Company.ToLower().Contains(search) ||
+                application.Position.ToLower().Contains(search));
+        }
+
+        var totalItems = await query.CountAsync();
+        var descending = request.SortDirection.Equals(
+            "desc", StringComparison.OrdinalIgnoreCase);
+        query = ApplySorting(query, request.SortBy, descending);
+
+        var applications = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
             .ToListAsync();
+
+        return Ok(new PagedResponse<JobApplicationResponse>(
+            applications.Select(JobApplicationResponse.FromEntity).ToList(),
+            request.Page,
+            request.PageSize,
+            totalItems,
+            (int)Math.Ceiling(totalItems / (double)request.PageSize)));
     }
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<JobApplication>> GetById(int id)
+    public async Task<ActionResult<JobApplicationResponse>> GetById(int id)
     {
-        var application = await _context.JobApplications.FindAsync(id);
+        var application = await _context.JobApplications
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == id);
 
         return application is null
-            ? NotFound()
-            : Ok(application);
+            ? Problem(statusCode: StatusCodes.Status404NotFound,
+                title: "Job application not found",
+                detail: $"No job application with ID {id} exists.")
+            : Ok(JobApplicationResponse.FromEntity(application));
     }
 
     [HttpPost]
-    public async Task<ActionResult<JobApplication>> Create(
-        JobApplication application)
+    public async Task<ActionResult<JobApplicationResponse>> Create(
+        CreateJobApplicationRequest request)
     {
-        application.Id = 0;
-        application.AppliedDate = application.AppliedDate.ToUniversalTime();
+        if (!JobApplicationStatuses.TryNormalize(request.Status, out var status))
+        {
+            return InvalidStatus(nameof(request.Status));
+        }
+
+        var application = new JobApplication
+        {
+            Company = request.Company.Trim(),
+            Position = request.Position.Trim(),
+            Status = status,
+            AppliedDate = (request.AppliedDate ?? DateTime.UtcNow).ToUniversalTime(),
+            Salary = request.Salary,
+            Notes = NormalizeOptionalText(request.Notes)
+        };
 
         _context.JobApplications.Add(application);
         await _context.SaveChangesAsync();
 
         _logger.LogInformation(
             "Created job application {ApplicationId} for {Company}",
-            application.Id,
-            application.Company);
+            application.Id, application.Company);
 
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = application.Id },
-            application);
+        var response = JobApplicationResponse.FromEntity(application);
+        return CreatedAtAction(nameof(GetById), new { id = application.Id }, response);
     }
 
     [HttpPut("{id:int}")]
-    public async Task<IActionResult> Update(
+    public async Task<ActionResult<JobApplicationResponse>> Update(
         int id,
-        JobApplication application)
+        UpdateJobApplicationRequest request)
     {
-        if (id != application.Id)
+        if (!JobApplicationStatuses.TryNormalize(request.Status, out var status))
         {
-            return BadRequest();
+            return InvalidStatus(nameof(request.Status));
         }
 
-        _context.Entry(application).State = EntityState.Modified;
-
-        try
+        var application = await _context.JobApplications.FindAsync(id);
+        if (application is null)
         {
-            await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            if (!await _context.JobApplications.AnyAsync(x => x.Id == id))
-            {
-                return NotFound();
-            }
-
-            throw;
+            return Problem(statusCode: StatusCodes.Status404NotFound,
+                title: "Job application not found",
+                detail: $"No job application with ID {id} exists.");
         }
 
-        return NoContent();
+        application.Company = request.Company.Trim();
+        application.Position = request.Position.Trim();
+        application.Status = status;
+        application.AppliedDate = request.AppliedDate!.Value.ToUniversalTime();
+        application.Salary = request.Salary;
+        application.Notes = NormalizeOptionalText(request.Notes);
+
+        await _context.SaveChangesAsync();
+        return Ok(JobApplicationResponse.FromEntity(application));
     }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
         var application = await _context.JobApplications.FindAsync(id);
-
         if (application is null)
         {
-            return NotFound();
+            return Problem(statusCode: StatusCodes.Status404NotFound,
+                title: "Job application not found",
+                detail: $"No job application with ID {id} exists.");
         }
 
         _context.JobApplications.Remove(application);
         await _context.SaveChangesAsync();
-
         return NoContent();
     }
 
     [HttpGet("dashboard")]
-    public async Task<IActionResult> GetDashboard()
+    public async Task<ActionResult<IReadOnlyList<StatusCountResponse>>> GetDashboard()
     {
         var counts = await _context.JobApplications
             .AsNoTracking()
-            .GroupBy(x => x.Status)
-            .Select(group => new
-            {
-                status = group.Key,
-                count = group.Count()
-            })
+            .GroupBy(application => application.Status)
+            .Select(group => new StatusCountResponse(group.Key, group.Count()))
+            .OrderBy(item => item.Status)
             .ToListAsync();
 
         return Ok(counts);
     }
+
+    private ActionResult InvalidStatus(string fieldName) =>
+        InvalidField(fieldName,
+            $"Status must be one of: {string.Join(", ", JobApplicationStatuses.All)}.");
+
+    private ActionResult InvalidField(string fieldName, string error) =>
+        BadRequest(new ValidationProblemDetails(
+            new Dictionary<string, string[]> { [fieldName] = [error] })
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "One or more validation errors occurred."
+        });
+
+    private static string? NormalizeOptionalText(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static IQueryable<JobApplication> ApplySorting(
+        IQueryable<JobApplication> query,
+        string sortBy,
+        bool descending) => sortBy.ToLowerInvariant() switch
+        {
+            "company" => descending
+                ? query.OrderByDescending(item => item.Company).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.Company).ThenBy(item => item.Id),
+            "position" => descending
+                ? query.OrderByDescending(item => item.Position).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.Position).ThenBy(item => item.Id),
+            "salary" => descending
+                ? query.OrderByDescending(item => item.Salary).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.Salary).ThenBy(item => item.Id),
+            "status" => descending
+                ? query.OrderByDescending(item => item.Status).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.Status).ThenBy(item => item.Id),
+            _ => descending
+                ? query.OrderByDescending(item => item.AppliedDate).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.AppliedDate).ThenBy(item => item.Id)
+        };
 }

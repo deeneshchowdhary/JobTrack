@@ -23,7 +23,11 @@ public sealed class JobTrackApiFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] =
                     "Server=test;Database=JobTrack;User Id=test;Password=test;",
-                ["Database:MigrateOnStartup"] = "false"
+                ["Database:MigrateOnStartup"] = "false",
+                ["Jwt:Issuer"] = "JobTrack.Tests",
+                ["Jwt:Audience"] = "JobTrack.Tests.Client",
+                ["Jwt:SigningKey"] =
+                    "JobTrack_Integration_Test_Signing_Key_2026!"
             });
         });
 

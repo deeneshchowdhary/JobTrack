@@ -1,12 +1,15 @@
+using System.Security.Claims;
 using JobTrack.Api.Contracts;
 using JobTrack.Api.Data;
 using JobTrack.Api.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobTrack.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class JobApplicationsController : ControllerBase
 {
@@ -31,6 +34,7 @@ public class JobApplicationsController : ControllerBase
     public async Task<ActionResult<PagedResponse<JobApplicationResponse>>> GetAll(
         [FromQuery] JobApplicationQuery request)
     {
+        var userId = CurrentUserId;
         if (!SortFields.Contains(request.SortBy))
         {
             return InvalidField(nameof(request.SortBy),
@@ -45,7 +49,9 @@ public class JobApplicationsController : ControllerBase
         }
 
         IQueryable<JobApplication> query =
-            _context.JobApplications.AsNoTracking();
+            _context.JobApplications
+                .AsNoTracking()
+                .Where(application => application.UserId == userId);
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
@@ -86,9 +92,10 @@ public class JobApplicationsController : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<JobApplicationResponse>> GetById(int id)
     {
+        var userId = CurrentUserId;
         var application = await _context.JobApplications
             .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == id);
+            .SingleOrDefaultAsync(item => item.Id == id && item.UserId == userId);
 
         return application is null
             ? Problem(statusCode: StatusCodes.Status404NotFound,
@@ -101,6 +108,7 @@ public class JobApplicationsController : ControllerBase
     public async Task<ActionResult<JobApplicationResponse>> Create(
         CreateJobApplicationRequest request)
     {
+        var userId = CurrentUserId;
         if (!JobApplicationStatuses.TryNormalize(request.Status, out var status))
         {
             return InvalidStatus(nameof(request.Status));
@@ -113,7 +121,8 @@ public class JobApplicationsController : ControllerBase
             Status = status,
             AppliedDate = (request.AppliedDate ?? DateTime.UtcNow).ToUniversalTime(),
             Salary = request.Salary,
-            Notes = NormalizeOptionalText(request.Notes)
+            Notes = NormalizeOptionalText(request.Notes),
+            UserId = userId
         };
 
         _context.JobApplications.Add(application);
@@ -132,12 +141,14 @@ public class JobApplicationsController : ControllerBase
         int id,
         UpdateJobApplicationRequest request)
     {
+        var userId = CurrentUserId;
         if (!JobApplicationStatuses.TryNormalize(request.Status, out var status))
         {
             return InvalidStatus(nameof(request.Status));
         }
 
-        var application = await _context.JobApplications.FindAsync(id);
+        var application = await _context.JobApplications
+            .SingleOrDefaultAsync(item => item.Id == id && item.UserId == userId);
         if (application is null)
         {
             return Problem(statusCode: StatusCodes.Status404NotFound,
@@ -159,7 +170,9 @@ public class JobApplicationsController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var application = await _context.JobApplications.FindAsync(id);
+        var userId = CurrentUserId;
+        var application = await _context.JobApplications
+            .SingleOrDefaultAsync(item => item.Id == id && item.UserId == userId);
         if (application is null)
         {
             return Problem(statusCode: StatusCodes.Status404NotFound,
@@ -175,8 +188,10 @@ public class JobApplicationsController : ControllerBase
     [HttpGet("dashboard")]
     public async Task<ActionResult<IReadOnlyList<StatusCountResponse>>> GetDashboard()
     {
+        var userId = CurrentUserId;
         var counts = await _context.JobApplications
             .AsNoTracking()
+            .Where(application => application.UserId == userId)
             .GroupBy(application => application.Status)
             .Select(group => new StatusCountResponse(group.Key, group.Count()))
             .OrderBy(item => item.Status)
@@ -196,6 +211,11 @@ public class JobApplicationsController : ControllerBase
             Status = StatusCodes.Status400BadRequest,
             Title = "One or more validation errors occurred."
         });
+
+    private string CurrentUserId =>
+        User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? throw new InvalidOperationException(
+            "The authenticated user has no name identifier claim.");
 
     private static string? NormalizeOptionalText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

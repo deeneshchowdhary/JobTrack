@@ -1,8 +1,10 @@
+using System.Security.Claims;
 using JobTrack.Api.Contracts;
 using JobTrack.Api.Controllers;
 using JobTrack.Api.Data;
 using JobTrack.Api.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -10,6 +12,7 @@ namespace JobTrack.Api.Tests;
 
 public class JobApplicationsControllerTests
 {
+    private const string TestUserId = "test-user-id";
     private static JobTrackDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<JobTrackDbContext>()
@@ -20,8 +23,22 @@ public class JobApplicationsControllerTests
     }
 
     private static JobApplicationsController CreateController(
-        JobTrackDbContext context) =>
-        new(context, NullLogger<JobApplicationsController>.Instance);
+        JobTrackDbContext context)
+    {
+        var controller = new JobApplicationsController(
+            context, NullLogger<JobApplicationsController>.Instance);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, TestUserId)],
+                    "Test"))
+            }
+        };
+
+        return controller;
+    }
 
     [Fact]
     public async Task Create_ValidRequest_NormalizesAndSavesApplication()
@@ -144,6 +161,7 @@ public class JobApplicationsControllerTests
             Company = company,
             Position = position,
             Status = status,
-            AppliedDate = DateTime.UtcNow.AddDays(-daysAgo)
+            AppliedDate = DateTime.UtcNow.AddDays(-daysAgo),
+            UserId = TestUserId
         };
 }

@@ -137,12 +137,19 @@ Server=(localdb)\MSSQLLocalDB;Database=JobTrack;Trusted_Connection=True;TrustSer
 
 ### 3. Configure the API
 
-The API requires `ConnectionStrings:DefaultConnection`. For local development, store it with .NET user secrets so credentials do not enter source control:
+The API requires `ConnectionStrings:DefaultConnection` and a JWT signing key of
+at least 32 characters. For local development, store them with .NET user secrets
+so credentials do not enter source control:
 
 ```bash
 dotnet user-secrets set \
   "ConnectionStrings:DefaultConnection" \
   "Server=localhost;Database=JobTrack;User Id=<user>;Password=<password>;TrustServerCertificate=True;" \
+  --project JobTrack.Api
+
+dotnet user-secrets set \
+  "Jwt:SigningKey" \
+  "<a-random-secret-containing-at-least-32-characters>" \
   --project JobTrack.Api
 ```
 
@@ -211,6 +218,28 @@ To export Functions telemetry to Application Insights, set `APPLICATIONINSIGHTS_
 ## API reference
 
 All application routes are rooted at `/api/JobApplications`.
+
+Application and dashboard routes require a JWT bearer token. Registration and
+login are public:
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `POST` | `/api/auth/register` | Create an account and receive an access token |
+| `POST` | `/api/auth/login` | Authenticate and receive an access token |
+
+Register, then send the returned `accessToken` in subsequent requests:
+
+```bash
+curl -X POST http://localhost:5208/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","password":"StrongPass123!"}'
+
+curl http://localhost:5208/api/JobApplications \
+  -H 'Authorization: Bearer <access-token>'
+```
+
+Accounts are isolated: list and dashboard queries include only the authenticated
+user's applications, and another user's record IDs return `404 Not Found`.
 
 | Method | Route | Description | Success response |
 | --- | --- | --- | --- |
@@ -292,6 +321,12 @@ dotnet ef database update --project JobTrack.Api
 
 Review generated migrations before committing them, especially when a change may alter or remove existing data.
 
+The `AddIdentityAndOwnership` migration leaves applications created before
+authentication with a null owner. They are intentionally hidden from all API
+users. Before upgrading an existing installation, create the intended account
+and assign its `AspNetUsers.Id` to those rows, or export and re-import them under
+an authenticated account.
+
 ## Configuration reference
 
 | Setting | Component | Required | Purpose |
@@ -301,13 +336,19 @@ Review generated migrations before committing them, especially when a change may
 | `AzureWebJobsStorage` | Functions host | Yes | Functions host storage; local configuration uses Azurite |
 | `FUNCTIONS_WORKER_RUNTIME` | Functions host | Yes | Must be `dotnet-isolated` |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Functions | No | Enables Azure Monitor OpenTelemetry export |
+| `Jwt:Issuer` | API | Yes | Expected JWT issuer; defaults to `JobTrack.Api` |
+| `Jwt:Audience` | API | Yes | Expected JWT audience; defaults to `JobTrack.Client` |
+| `Jwt:SigningKey` | API | Yes | Secret key used to sign tokens; minimum 32 characters |
+| `Jwt:ExpirationMinutes` | API | No | Access-token lifetime; defaults to 60 minutes |
 
 In Azure App Service, configure the API connection string through App Service Configuration or a Key Vault reference. In Azure Functions, add the Functions settings as application settings. Do not store production secrets in `appsettings*.json`, `local.settings.json`, pipeline YAML, or source control.
 
 ## CORS and security notes
 
 - The API currently permits browser requests only from origins beginning with `http://localhost:`. Update the `AngularApp` CORS policy before deploying a browser frontend on another origin.
-- The API currently has no authentication or authorization. Place it behind an appropriate identity/access layer before storing sensitive or personal data in production.
+- The API uses self-hosted ASP.NET Core Identity and signed JWT access tokens.
+  Protect the signing key through user secrets, environment configuration, or a
+  managed secret store, and use HTTPS in deployed environments.
 - Swagger is currently enabled in every environment. Consider limiting it to development or protecting it in production.
 - The Functions status endpoint requires a function key after deployment; the timer trigger is not publicly callable.
 

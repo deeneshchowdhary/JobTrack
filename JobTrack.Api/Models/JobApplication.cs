@@ -23,4 +23,8 @@ public class JobApplication
 
     [MaxLength(1000)]
     public string? Notes { get; set; }
+
+    public string? UserId { get; set; }
+
+    public ApplicationUser? User { get; set; }
 }

@@ -31,6 +31,9 @@ services:
       ASPNETCORE_HTTP_PORTS: "8080"
       ConnectionStrings__DefaultConnection: "Server=database,1433;Database=JobTrack;User Id=sa;Password=${MSSQL_SA_PASSWORD:-JobTrack_Local_2026!};Encrypt=True;TrustServerCertificate=True;"
       Database__MigrateOnStartup: "true"
+      Jwt__Issuer: "JobTrack.Api"
+      Jwt__Audience: "JobTrack.Client"
+      Jwt__SigningKey: "${JOBTRACK_JWT_SIGNING_KEY:-JobTrack_Local_JWT_Key_Change_Me_2026!}"
     ports:
       - "${JOBTRACK_API_PORT:-5208}:8080"
     depends_on:

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using JobTrack.Api.Contracts;
 using Microsoft.AspNetCore.Http;
@@ -13,6 +14,7 @@ public class JobApplicationsIntegrationTests
     {
         await using var factory = new JobTrackApiFactory();
         using var client = factory.CreateClient();
+        await Authenticate(client);
 
         var createResponse = await client.PostAsJsonAsync(
             "/api/JobApplications",
@@ -40,6 +42,7 @@ public class JobApplicationsIntegrationTests
     {
         await using var factory = new JobTrackApiFactory();
         using var client = factory.CreateClient();
+        await Authenticate(client);
 
         var response = await client.PostAsJsonAsync(
             "/api/JobApplications",
@@ -61,6 +64,7 @@ public class JobApplicationsIntegrationTests
     {
         await using var factory = new JobTrackApiFactory();
         using var client = factory.CreateClient();
+        await Authenticate(client);
 
         var response = await client.GetAsync(
             "/api/JobApplications?pageSize=101");
@@ -77,6 +81,7 @@ public class JobApplicationsIntegrationTests
     {
         await using var factory = new JobTrackApiFactory();
         using var client = factory.CreateClient();
+        await Authenticate(client);
 
         await Create(client, "Beta Labs", "Platform Engineer", "Applied");
         await Create(client, "Alpha Labs", "Software Engineer", "Interview");
@@ -99,6 +104,7 @@ public class JobApplicationsIntegrationTests
     {
         await using var factory = new JobTrackApiFactory();
         using var client = factory.CreateClient();
+        await Authenticate(client);
         var created = await Create(
             client, "Old Company", "Developer", "Applied");
 
@@ -131,6 +137,79 @@ public class JobApplicationsIntegrationTests
             getResponse.Content.Headers.ContentType?.MediaType);
     }
 
+    [Fact]
+    public async Task Applications_WithoutToken_ReturnUnauthorized()
+    {
+        await using var factory = new JobTrackApiFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/JobApplications");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_WithRegisteredCredentials_ReturnsUsableToken()
+    {
+        await using var factory = new JobTrackApiFactory();
+        using var client = factory.CreateClient();
+        await Authenticate(client, "login@example.com");
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest
+            {
+                Email = "login@example.com",
+                Password = "StrongPass123!"
+            });
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var authentication = await loginResponse.Content
+            .ReadFromJsonAsync<AuthenticationResponse>();
+        Assert.NotNull(authentication);
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", authentication.AccessToken);
+        var protectedResponse = await client.GetAsync("/api/JobApplications");
+        Assert.Equal(HttpStatusCode.OK, protectedResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Applications_AreIsolatedBetweenUsers()
+    {
+        await using var factory = new JobTrackApiFactory();
+        using var firstClient = factory.CreateClient();
+        using var secondClient = factory.CreateClient();
+        await Authenticate(firstClient, "first@example.com");
+        await Authenticate(secondClient, "second@example.com");
+
+        var application = await Create(
+            firstClient, "Private Company", "Engineer", "Applied");
+
+        var list = await secondClient.GetFromJsonAsync<
+            PagedResponse<JobApplicationResponse>>("/api/JobApplications");
+        var getResponse = await secondClient.GetAsync(
+            $"/api/JobApplications/{application.Id}");
+        var updateResponse = await secondClient.PutAsJsonAsync(
+            $"/api/JobApplications/{application.Id}",
+            new UpdateJobApplicationRequest
+            {
+                Company = "Stolen Company",
+                Position = "Engineer",
+                Status = "Offer",
+                AppliedDate = application.AppliedDate
+            });
+        var deleteResponse = await secondClient.DeleteAsync(
+            $"/api/JobApplications/{application.Id}");
+
+        Assert.NotNull(list);
+        Assert.Empty(list.Items);
+        Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, updateResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, deleteResponse.StatusCode);
+    }
+
     private static CreateJobApplicationRequest ValidCreateRequest() => new()
     {
         Company = "Example Corp",
@@ -157,5 +236,25 @@ public class JobApplicationsIntegrationTests
         response.EnsureSuccessStatusCode();
         return (await response.Content
             .ReadFromJsonAsync<JobApplicationResponse>())!;
+    }
+
+    private static async Task Authenticate(
+        HttpClient client,
+        string email = "user@example.com")
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequest
+            {
+                Email = email,
+                Password = "StrongPass123!"
+            });
+
+        response.EnsureSuccessStatusCode();
+        var authentication = await response.Content
+            .ReadFromJsonAsync<AuthenticationResponse>();
+        Assert.NotNull(authentication);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", authentication.AccessToken);
     }
 }

@@ -5,6 +5,8 @@
 **/bin
 **/obj
 **/publish
+**/node_modules
+**/dist
 **/local.settings.json
 **/*.user
 **/*.zip

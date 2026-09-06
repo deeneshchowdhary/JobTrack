@@ -13,6 +13,7 @@ variables:
   functionsProjectPath: JobTrack.Functions/JobTrack_Functions.csproj
   artifactName: jobtrack-api
   functionsArtifactName: jobtrack-functions
+  webArtifactName: jobtrack-web
   azureSubscription: jobtrack-azure-connection
   appServiceName: jobtrack-api-deenesh
 
@@ -96,6 +97,29 @@ stages:
             inputs:
               targetPath: "$(Build.ArtifactStagingDirectory)/functions"
               artifact: "$(functionsArtifactName)"
+
+          - task: NodeTool@0
+            displayName: Install Node.js
+            inputs:
+              versionSpec: "24.x"
+
+          - script: npm ci
+            displayName: Install web dependencies
+            workingDirectory: apps/web
+
+          - script: npm test -- --watch=false
+            displayName: Test web application
+            workingDirectory: apps/web
+
+          - script: npm run build
+            displayName: Build web application
+            workingDirectory: apps/web
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish web artifact
+            inputs:
+              targetPath: apps/web/dist/jobtrack-web/browser
+              artifact: "$(webArtifactName)"
 
   - stage: Deploy
     displayName: Deploy to Azure

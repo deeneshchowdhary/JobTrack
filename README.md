@@ -9,6 +9,8 @@ JobTrack is a small job-application tracking backend built on ASP.NET Core and S
 - Expose a lightweight API health endpoint
 - Detect applications requiring follow-up on a five-minute schedule
 - Query the current follow-up count through an Azure Functions HTTP endpoint
+- Use a responsive Angular workspace with registration, login, board and list views
+- Create, edit, move, inspect, search, filter, sort, and delete applications in the browser
 - Explore and test the API through Swagger UI
 - Run controller tests with xUnit and an EF Core in-memory database
 - Build, test, package, and deploy the API with Azure Pipelines
@@ -18,6 +20,7 @@ JobTrack is a small job-application tracking backend built on ASP.NET Core and S
 | Area | Technology |
 | --- | --- |
 | REST API | ASP.NET Core 10, controllers, Swagger/OpenAPI |
+| Web application | Angular 22, standalone components, signals, reactive forms |
 | Data access | Entity Framework Core 10, SQL Server |
 | Background processing | Azure Functions v4, .NET 8 isolated worker |
 | Observability | .NET logging; optional Application Insights through OpenTelemetry for Functions |
@@ -29,6 +32,7 @@ JobTrack is a small job-application tracking backend built on ASP.NET Core and S
 ```mermaid
 flowchart LR
     Client[Client or Swagger UI] -->|HTTP / JSON| API[JobTrack ASP.NET Core API]
+    Web[Angular web application] -->|JWT + HTTP / JSON| API
     API -->|Entity Framework Core| DB[(SQL Server / Azure SQL)]
     Timer[Five-minute timer] --> Functions[JobTrack Azure Functions]
     FunctionClient[Authorized function client] -->|GET follow-ups/status| Functions
@@ -47,6 +51,7 @@ JobTrack/
 │   └── Models/                   Domain/data model
 ├── JobTrack.Api.Tests/           API controller tests
 ├── JobTrack.Functions/           Timer and HTTP-triggered Azure Functions
+├── apps/web/                     Angular single-page application
 ├── JobTrack.slnx                 API, Functions, and test solution
 └── azure-pipelines.yml           Build, test, package, and API deployment pipeline
 ```
@@ -90,7 +95,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The API is then available at `http://localhost:5208`, with Swagger UI at
+The web application is available at `http://localhost:4200`. The API remains
+available at `http://localhost:5208`, with Swagger UI at
 `http://localhost:5208/swagger`. The database schema is created automatically.
 Values in `.env` are for local development only and must not be reused in a
 deployed environment.
@@ -109,6 +115,20 @@ docker compose down --volumes
 
 On ARM-based computers, the SQL Server container runs through `linux/amd64`
 emulation and may start more slowly.
+
+### Run the web application without Docker
+
+With the API running on port `5208`, start Angular's development server. Its
+development proxy forwards `/api` requests to the API:
+
+```bash
+cd apps/web
+npm install
+npm start
+```
+
+Open `http://localhost:4200`. Access tokens are intentionally kept in memory,
+not local storage, so refreshing or closing the tab signs the user out.
 
 ### Manual setup
 
@@ -358,8 +378,8 @@ In Azure App Service, configure the API connection string through App Service Co
 
 1. Installs the .NET 10 SDK.
 2. Restores and builds the API, tests, and Azure Functions in `Release` mode.
-3. Runs the xUnit tests and collects coverage.
-4. Publishes separate zipped API and Azure Functions artifacts.
+3. Runs the xUnit and Angular tests and collects API coverage.
+4. Builds Angular and publishes API, Functions, and web artifacts separately.
 5. Deploys it to a Linux Azure App Service.
 
 Before using the pipeline in another Azure DevOps project, update these variables:

@@ -1,0 +1,81 @@
+<div class="app-shell">
+  <header>
+    <a class="brand" href="/" aria-label="JobTrack home"><span>JT</span><b>JobTrack</b></a>
+    <nav><span>{{ email() }}</span><button class="quiet" type="button" (click)="logout()">Sign out</button></nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div><p class="eyebrow">Job search workspace</p><h1>Keep the momentum going.</h1><p>One clear place for every opportunity and next step.</p></div>
+      <button class="primary" type="button" (click)="openCreate()"><span>＋</span> Add application</button>
+    </section>
+
+    <section class="metrics" aria-label="Application summary">
+      <article><span>Total applications</span><strong>{{ totalItems() }}</strong><small>Across your active search</small></article>
+      <article><span>Interviews</span><strong>{{ countFor('Interview') }}</strong><small>Currently in progress</small></article>
+      <article><span>Offers</span><strong>{{ countFor('Offer') }}</strong><small>Worth celebrating</small></article>
+      <article class="accent"><span>Response rate</span><strong>{{ responseRate() }}%</strong><small>Beyond saved or applied</small></article>
+    </section>
+
+    <section class="workspace">
+      <div class="toolbar">
+        <form class="filters" (ngSubmit)="applyFilters()">
+          <label class="search"><span aria-hidden="true">⌕</span><input aria-label="Search applications" placeholder="Search company or role" [value]="search()" (input)="search.set($any($event.target).value)"></label>
+          <select aria-label="Filter by status" [value]="statusFilter()" (change)="statusFilter.set($any($event.target).value); applyFilters()"><option value="">All statuses</option>@for (status of statuses; track status) { <option [value]="status">{{ status }}</option> }</select>
+          <select aria-label="Sort applications" [value]="sortBy()" (change)="sortBy.set($any($event.target).value); applyFilters()"><option value="appliedDate">Date</option><option value="company">Company</option><option value="position">Position</option><option value="salary">Salary</option></select>
+          <button class="quiet" type="submit">Search</button>
+          @if (search() || statusFilter()) { <button class="link" type="button" (click)="clearFilters()">Clear</button> }
+        </form>
+        <div class="view-toggle"><button type="button" [class.active]="view() === 'board'" (click)="setView('board')">Board</button><button type="button" [class.active]="view() === 'list'" (click)="setView('list')">List</button></div>
+      </div>
+
+      @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+      @if (loading()) { <div class="loading"><span></span><p>Gathering your opportunities…</p></div> }
+      @else if (!applications().length) {
+        <div class="empty"><div>◎</div><h2>No applications here yet</h2><p>Add your first opportunity or clear the current filters.</p><button class="primary" type="button" (click)="openCreate()">Add application</button></div>
+      } @else if (view() === 'board') {
+        <div class="board">
+          @for (status of statuses; track status) {
+            <section class="column">
+              <div class="column-title"><span class="dot" [attr.data-status]="status"></span><h2>{{ status }}</h2><b>{{ applicationsFor(status).length }}</b></div>
+              <div class="cards">
+                @for (application of applicationsFor(status); track application.id) {
+                  <article class="application-card" tabindex="0" (click)="selected.set(application)" (keydown.enter)="selected.set(application)">
+                    <div class="company-mark">{{ application.company.charAt(0).toUpperCase() }}</div>
+                    <h3>{{ application.position }}</h3><p>{{ application.company }}</p>
+                    <div class="card-meta"><span>{{ application.appliedDate | date:'MMM d' }}</span>@if (application.salary) { <span>{{ application.salary | currency:'USD':'symbol':'1.0-0' }}</span> }</div>
+                    <label class="move" (click)="$event.stopPropagation()">Move to<select [value]="application.status" (change)="move(application, $any($event.target).value)">@for (option of statuses; track option) { <option [value]="option">{{ option }}</option> }</select></label>
+                  </article>
+                }
+              </div>
+            </section>
+          }
+        </div>
+      } @else {
+        <div class="table-wrap"><table><thead><tr><th>Role</th><th>Company</th><th>Status</th><th>Applied</th><th>Salary</th><th></th></tr></thead><tbody>
+          @for (application of applications(); track application.id) { <tr><td><button class="row-link" (click)="selected.set(application)">{{ application.position }}</button></td><td>{{ application.company }}</td><td><span class="status">{{ application.status }}</span></td><td>{{ application.appliedDate | date:'mediumDate' }}</td><td>{{ application.salary ? (application.salary | currency:'USD':'symbol':'1.0-0') : '—' }}</td><td><button class="link" (click)="openEdit(application)">Edit</button></td></tr> }
+        </tbody></table></div>
+        <div class="pagination"><button [disabled]="page() <= 1" (click)="goToPage(page() - 1)">Previous</button><span>Page {{ page() }} of {{ totalPages() }}</span><button [disabled]="page() >= totalPages()" (click)="goToPage(page() + 1)">Next</button></div>
+      }
+    </section>
+  </main>
+
+  @if (editorOpen()) {
+    <div class="overlay" (click)="closeEditor()"><aside class="drawer" (click)="$event.stopPropagation()" aria-label="Application editor">
+      <div class="drawer-head"><div><p class="eyebrow">{{ editing() ? 'Update opportunity' : 'New opportunity' }}</p><h2>{{ editing() ? 'Edit application' : 'Add application' }}</h2></div><button class="close" (click)="closeEditor()" aria-label="Close">×</button></div>
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <label>Company<input formControlName="company" placeholder="Acme, Inc."></label>
+        <label>Position<input formControlName="position" placeholder="Software Engineer"></label>
+        <div class="form-row"><label>Status<select formControlName="status">@for (status of statuses; track status) { <option [value]="status">{{ status }}</option> }</select></label><label>Application date<input type="date" formControlName="appliedDate"></label></div>
+        <label>Annual salary <span>(optional)</span><input type="number" min="0" formControlName="salary" placeholder="120000"></label>
+        <label>Notes <span>(optional)</span><textarea formControlName="notes" rows="6" placeholder="Contacts, next steps, or interview notes"></textarea></label>
+        @if (form.invalid && form.touched) { <p class="error">Company, position, status, and date are required.</p> }
+        <div class="actions"><button class="quiet" type="button" (click)="closeEditor()">Cancel</button><button class="primary" type="submit" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Save application' }}</button></div>
+      </form>
+    </aside></div>
+  }
+
+  @if (selected(); as application) {
+    <div class="overlay" (click)="selected.set(null)"><aside class="drawer detail" (click)="$event.stopPropagation()"><div class="drawer-head"><div class="company-mark large">{{ application.company.charAt(0) }}</div><button class="close" (click)="selected.set(null)" aria-label="Close">×</button></div><p class="eyebrow">{{ application.status }}</p><h2>{{ application.position }}</h2><h3>{{ application.company }}</h3><dl><div><dt>Applied</dt><dd>{{ application.appliedDate | date:'longDate' }}</dd></div><div><dt>Salary</dt><dd>{{ application.salary ? (application.salary | currency:'USD':'symbol':'1.0-0') : 'Not specified' }}</dd></div></dl><section class="notes"><h4>Notes</h4><p>{{ application.notes || 'No notes added yet.' }}</p></section><div class="actions"><button class="danger" (click)="remove(application)">Delete</button><button class="primary" (click)="openEdit(application)">Edit application</button></div></aside></div>
+  }
+</div>

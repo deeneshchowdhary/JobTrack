@@ -1,0 +1,32 @@
+<main class="auth-shell">
+  <section class="story" aria-label="JobTrack introduction">
+    <a class="brand" href="/" aria-label="JobTrack home"><span>JT</span> JobTrack</a>
+    <div class="story-copy">
+      <p class="eyebrow">Your search, organized</p>
+      <h1>Turn every application into forward momentum.</h1>
+      <p>Track opportunities, stay on top of follow-ups, and see your progress without losing control of your data.</p>
+      <div class="proof"><strong>Private by design.</strong> Every application belongs only to your account.</div>
+    </div>
+  </section>
+
+  <section class="auth-panel">
+    <div class="auth-card">
+      <div class="switcher" aria-label="Authentication mode">
+        <button type="button" [class.active]="mode() === 'login'" (click)="setMode('login')">Sign in</button>
+        <button type="button" [class.active]="mode() === 'register'" (click)="setMode('register')">Create account</button>
+      </div>
+      <p class="eyebrow">{{ mode() === 'login' ? 'Welcome back' : 'Start tracking' }}</p>
+      <h2>{{ mode() === 'login' ? 'Pick up where you left off.' : 'Build a calmer job search.' }}</h2>
+
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        <label>Email address<input type="email" formControlName="email" autocomplete="email" placeholder="you@example.com"></label>
+        @if (form.controls.email.touched && form.controls.email.invalid) { <small>Enter a valid email address.</small> }
+        <label>Password<input type="password" formControlName="password" [autocomplete]="mode() === 'login' ? 'current-password' : 'new-password'" placeholder="At least 8 characters"></label>
+        @if (form.controls.password.touched && form.controls.password.invalid) { <small>Password must contain at least 8 characters.</small> }
+        @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+        <button class="primary" type="submit" [disabled]="loading()">{{ loading() ? 'Working…' : mode() === 'login' ? 'Sign in' : 'Create my account' }}</button>
+      </form>
+      <p class="security-note">Your access token stays in memory and is cleared when this tab is refreshed or closed.</p>
+    </div>
+  </section>
+</main>

@@ -302,3 +302,13 @@ Start Azurite, or replace `UseDevelopmentStorage=true` with a valid Azure Storag
 
 **Browser requests are blocked by CORS.**  
 The current policy accepts only `http://localhost:<port>` origins. Add the deployed frontend origin to the policy in `JobTrack.Api/Program.cs`.
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before
+opening an issue or pull request, and report suspected vulnerabilities through
+the process in [SECURITY.md](SECURITY.md).
+
+## License
+
+JobTrack is available under the [MIT License](LICENSE).

@@ -3,13 +3,16 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString =
-    builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException(
-        "Connection string 'DefaultConnection' was not found.");
+builder.Services.AddDbContext<JobTrackDbContext>((services, options) =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var connectionString =
+        configuration.GetConnectionString("DefaultConnection")
+        ?? throw new InvalidOperationException(
+            "Connection string 'DefaultConnection' was not found.");
 
-builder.Services.AddDbContext<JobTrackDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseSqlServer(connectionString);
+});
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
@@ -76,3 +79,5 @@ app.MapGet("/health", () => Results.Ok(new
 }));
 
 app.Run();
+
+public partial class Program;

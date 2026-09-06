@@ -276,9 +276,10 @@ dotnet test JobTrack.Api.Tests/JobTrack.Api.Tests.csproj \
   --collect "XPlat Code Coverage"
 ```
 
-The existing tests exercise DTO mapping, status validation, search, sorting,
-pagination, safe updates, and missing-record behavior with an isolated in-memory
-database.
+The test suite includes focused controller tests and HTTP integration tests built
+with `WebApplicationFactory`. It exercises routing, JSON serialization, model
+validation, Problem Details, DTO mapping, status validation, search, sorting,
+pagination, updates, and deletion with an isolated in-memory database.
 
 ## Database migrations
 
